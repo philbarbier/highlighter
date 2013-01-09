@@ -1,0 +1,106 @@
+<?
+
+class Highlights extends CI_Model {
+
+    private $idlength = 8;
+    private $availablechars = '0123456789abcdefghijklmnopqrstuvwxyz';
+    private $attempt = 0;
+    private $threshold = 5;
+    private $words = 2;
+
+    function __construct() {
+        parent::__construct();
+        $this->attempt = 0; // reset
+    }
+
+    function returnID() {
+        return $this->generateID();
+    }
+
+    private function generateID() {
+        $id = false;
+        if (strlen($this->availablechars) > 0) {
+            for($i=0; $i < $this->idlength; $i++) {
+                $id .= substr($this->availablechars, rand(0,(strlen($this->availablechars)-1)), 1);
+            }
+        }
+        // check exists
+        $result = $this->db->from('highlights')->where(array('hid'=>$id))->get()->row();
+        // if ID exists, generate another (until we find a unique)
+        if ($result) {
+            if ($this->attempt > $this->threshold) return false;
+            $this->attempt++;
+            $id = $this->generateID();
+        }
+        return $id;
+    }
+
+    function save($data) {
+        $data['created_date'] = (isset($data['created_date']) && (is_numeric($data['created_date']))) ? $data['created_date'] : date('U');
+        return $this->db->insert('highlights', $data);
+    }
+
+    function getViewdata($id) {
+        $where = array('hid'=>$id);
+        $result = $this->db->from('highlights')->where($where)->get()->row();
+        
+        $rd = array(); // return data
+        $rd['id'] = $id;
+        $rd['url'] = $result->url;
+        $rd['text'] = $result->selectedtext;
+        $rd['createddate'] = $result->created_date;
+        $w = explode(' ', $result->selectedtext, 5); // # words required+1
+        $ws = '';
+        for ($i=0; $i < $this->words; $i++) {
+            $ws .= isset($w[$i]) ? $w[$i] : '';
+            if ($i!=($this->words-1)&&(isset($w[$i]))) $ws .= ' ';
+        }
+        $rd['firstword'] = trim($ws);
+        $w = explode(' ', strrev($result->selectedtext), 5);
+        $lw = ''; //trim(@$w[0] . ' ' . @$w[1] . ' ' . @$w[2] . ' ' . @$w[3]);
+        for ($i=0; $i < $this->words; $i++) {
+            $lw .= (isset($w[$i])) ? $w[$i] : '';
+            if ($i!=($this->words-1)&&(isset($w[$i]))) $lw .= ' ';
+        }
+        $rd['lastword'] = strrev(trim($lw));
+        unset($w, $lw);
+        return $rd;
+    }
+
+    /**
+    * Taken from sunshine, thanks! :D
+    * Most img tags don't have an absolute URL, but for the purposes of downloading & storing, we need one.
+    * This function constructs an absolute URL from a whatever is specified as the "src" attribute of an image tage
+    * 
+    * @param String $img : the src attribute of a <img> tag
+    * @param String $lint_domain : A URL parsed with PHP's parse_url function
+    * @return string : The absolute URL of the $img parameter.
+    */
+  
+    public static function get_image_absolute_url($img,$lint_domain) {
+        // if the URL of the image src attr is relative to the page path (instead of an absolute url that starts with http:// or https://)
+        // IMPORTANT:  Youtube likes to start img src attribute with // instead of http:// for some reason.  Way to use the same standards as everyone else, guys.
+        $is_abs_path = false;
+        if (strpos($img,"//")  !== 0 && strpos($img,"http")  !== 0) {
+            // the url we're building needs to start with http://www.domain.com/
+            $imgix = $lint_domain['scheme'] . "://" . $lint_domain['host'];
+            // if the url is not relative to the document root on the server, it will be relative to the path of the page we're on.  
+            // figure out where the image lives, and build the url path starting with /
+            if (strpos($img,"/")  !== 0) {
+                $imgix = $imgix . $lint_domain['path'];
+            } else $is_abs_path = true; // this is an absolute path already, we don't need the extra trailing slash.
+  
+            // add the training slash if needed.
+            if (substr($imgix,(strlen($imgix)-1),1) != "/" && !$is_abs_path) $imgix .= "/";
+            $img = $imgix . $img;
+        }
+  
+        else if (strpos($img,"//") === 0) { $img = $lint_domain['scheme'] . ":" . $img; }
+  
+        return $img;
+   
+    }
+
+}
+
+?>
